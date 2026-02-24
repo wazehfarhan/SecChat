@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="VanishChat — Secret ephemeral chat rooms that self-destruct."
+    />
+
+    <!-- Security: prevent clickjacking (handled by Helmet) -->
+
+    <title>VanishChat — Ephemeral Encrypted Chat</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔥</text></svg>"
+    />
+  </head>
+  <body>
+    <!-- ══ Site Header ══════════════════════════════════════════ -->
+    <header>
+      <div class="logo">Vanish<span>Chat</span></div>
+      <span class="tagline"
+        >🔥 Messages that self-destruct. No logs. No traces.</span
+      >
+    </header>
+
+    <!-- ══════════════════════════════════════════════════════════
+     VIEW: HOME — Create / Join a room
+══════════════════════════════════════════════════════════════ -->
+    <div id="view-home" class="view">
+      <!-- Create Room Card -->
+      <div class="card">
+        <div class="card-title">🔑 Create a Room</div>
+
+        <form id="create-form" autocomplete="off" novalidate>
+          <div class="field">
+            <label for="create-type">Chat Type</label>
+            <select id="create-type" class="input" required>
+              <option value="group">👥 Group (unlimited users)</option>
+              <option value="single">🔒 Private (max 2 users)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="create-expiry">Auto-Destroy After</label>
+            <select id="create-expiry" class="input" required>
+              <option value="10m">⏱ 10 Minutes</option>
+              <option value="1h">⏰ 1 Hour</option>
+              <option value="24h">🗓 24 Hours</option>
+              <option value="custom">📅 Custom Date &amp; Time</option>
+            </select>
+          </div>
+
+          <div id="custom-expiry-wrapper" class="field hidden">
+            <label for="custom-expiry">Custom Expiry (UTC)</label>
+            <input
+              type="datetime-local"
+              id="custom-expiry"
+              class="input"
+              aria-label="Custom expiry datetime"
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="width: 100%">
+            ✨ Create Room
+          </button>
+        </form>
+
+        <div class="feature-pills" aria-label="Security features">
+          <span class="pill">🔐 E2E Encrypted</span>
+          <span class="pill">🗑 Auto-Deletes</span>
+          <span class="pill">👻 Anonymous</span>
+          <span class="pill">🚫 No Logs</span>
+        </div>
+      </div>
+
+      <!-- Join Room Card -->
+      <div class="card">
+        <div class="card-title">🚪 Join a Room</div>
+
+        <form id="join-form" autocomplete="off" novalidate>
+          <div class="field">
+            <label for="join-code">6-Character Room Code</label>
+            <input
+              type="text"
+              id="join-code"
+              class="input"
+              placeholder="e.g. A3B9CX"
+              maxlength="6"
+              pattern="[A-Za-z0-9]{6}"
+              style="
+                text-transform: uppercase;
+                letter-spacing: 0.2em;
+                font-family: monospace;
+                font-size: 1.2rem;
+              "
+              required
+            />
+          </div>
+
+          <p
+            style="
+              font-size: 0.82rem;
+              color: var(--text-muted);
+              margin-bottom: 1rem;
+              line-height: 1.6;
+            "
+          >
+            ℹ️ To decrypt messages you need the full share URL (including the
+            key after <code>#</code>). Ask the room creator for the complete
+            link.
+          </p>
+
+          <button type="submit" class="btn btn-primary" style="width: 100%">
+            🔓 Join Room
+          </button>
+        </form>
+
+        <div class="enc-badge" style="margin-top: 1.25rem">
+          <span>🛡</span>
+          <span
+            >Messages are encrypted in your browser before being sent. The
+            server never sees plaintext.</span
+          >
+        </div>
+      </div>
+    </div>
+    <!-- /#view-home -->
+
+    <!-- ══════════════════════════════════════════════════════════
+     VIEW: CHAT — Real-time messaging
+══════════════════════════════════════════════════════════════ -->
+    <div id="view-chat" class="view hidden">
+      <!-- Chat Header Bar -->
+      <div class="chat-header">
+        <div>
+          <div
+            class="room-code-badge"
+            id="room-code-display"
+            aria-label="Room code"
+          >
+            ------
+          </div>
+        </div>
+        <div class="chat-meta">
+          <div id="room-type-display"></div>
+          <div id="room-timer">Calculating...</div>
+        </div>
+        <button id="copy-code-btn" class="btn btn-ghost">📋 Copy Code</button>
+      </div>
+
+      <!-- Message List -->
+      <div
+        id="messages"
+        role="log"
+        aria-live="polite"
+        aria-label="Chat messages"
+      >
+        <!-- Messages injected here by app.js -->
+      </div>
+
+      <!-- Input Bar -->
+      <div class="chat-input-bar">
+        <textarea
+          id="message-input"
+          class="input"
+          placeholder="Type a message… (Enter to send, Shift+Enter for newline)"
+          maxlength="4096"
+          rows="1"
+          aria-label="Message input"
+        ></textarea>
+        <button id="send-btn" class="btn btn-primary" aria-label="Send message">
+          Send ➤
+        </button>
+      </div>
+    </div>
+    <!-- /#view-chat -->
+
+    <!-- ══════════════════════════════════════════════════════════
+     VIEW: EXPIRED — Session self-destructed
+══════════════════════════════════════════════════════════════ -->
+    <div id="view-expired" class="view hidden">
+      <div class="card">
+        <span class="expired-icon" aria-hidden="true">💥</span>
+        <h2>Session Destroyed</h2>
+        <p>
+          This chat session has reached its expiry time.<br />
+          All messages have been
+          <strong>permanently and irrecoverably deleted</strong>
+          from the server. No logs. No backups. No traces.
+        </p>
+        <button id="go-home-btn" class="btn btn-primary">← Back to Home</button>
+      </div>
+    </div>
+    <!-- /#view-expired -->
+
+    <!-- ══════════════════════════════════════════════════════════
+     MODAL: Nickname Picker
+══════════════════════════════════════════════════════════════ -->
+    <div
+      id="nickname-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="nickname-title"
+    >
+      <div class="modal-box">
+        <h2 id="nickname-title">👤 Choose Your Alias</h2>
+        <p>
+          You're completely anonymous. Pick any name — it won't be stored
+          anywhere.
+        </p>
+        <div class="field">
+          <label for="nickname-input">Nickname (max 32 chars)</label>
+          <input
+            type="text"
+            id="nickname-input"
+            class="input"
+            placeholder="e.g. GhostRider42"
+            maxlength="32"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <button
+          id="nickname-confirm"
+          class="btn btn-primary"
+          style="width: 100%"
+        >
+          Enter Room →
+        </button>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════
+     Scripts (Socket.IO CDN + local scripts)
+══════════════════════════════════════════════════════════════ -->
+    <!--
+    Socket.IO client loaded from the server itself
+    (Express serves it automatically at /socket.io/socket.io.js)
+-->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- E2E Encryption module (must load before app.js) -->
+    <script src="/js/crypto.js"></script>
+
+    <!-- Main application logic -->
+    <script src="/js/app.js"></script>
+  </body>
+</html>
