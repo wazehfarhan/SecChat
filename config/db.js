@@ -35,7 +35,7 @@ validateEnv();
 // Pool Configuration
 // ────────────────────────────────────────────────────────────
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || "127.0.0.1",
+  host: process.env.DB_HOST || process.env.RDS_HOSTNAME || "mysql",
   port: parseInt(process.env.DB_PORT || "3306", 10),
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "",
@@ -54,7 +54,7 @@ const pool = mysql.createPool({
 // ────────────────────────────────────────────────────────────
 /**
  * Test database connectivity with exponential backoff retry.
- * Fails fast if all attempts are exhausted.
+ * Logs error but doesn't crash if DB unavailable (frontend continues)
  */
 async function testConnection() {
   const retryAttempts = parseInt(process.env.DB_RETRY_ATTEMPTS || "5", 10);
@@ -85,18 +85,16 @@ async function testConnection() {
     }
   }
 
-  // All retries exhausted
-  console.error("[DB] ✗ FATAL: Cannot connect to MySQL after all retries.");
-  console.error("[DB] Last error:", lastError.message);
-  console.error("[DB] Check:");
-  console.error("   1. MySQL server is running");
-  console.error("   2. DB_HOST, DB_USER, DB_PASSWORD are correct in .env");
-  console.error("   3. Database exists or user has CREATE DATABASE privilege");
-  process.exit(1);
+  // Don't crash - log warning, frontend works without DB
+  console.error(
+    "[DB] ✗ MySQL unavailable. Rooms disabled until DB configured.",
+  );
+  console.error("[DB] Fix: Render Dashboard → New MySQL DB → Add env vars");
+  console.error("[DB] Vars: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME");
 }
 
-// Run connection test on startup
-testConnection();
+// Run connection test on startup (non-blocking)
+testConnection().catch(console.error);
 
 // ────────────────────────────────────────────────────────────
 // Error Handlers
@@ -106,9 +104,7 @@ testConnection();
  * Handle pool errors (connection drops, etc.)
  */
 pool.on("error", (err) => {
-  console.error("[DB] Connection pool error:", err.message);
-  // In production, alert monitoring system
-  // In development, just log
+  console.error("[DB] Pool error:", err.message);
 });
 
 /**
@@ -117,15 +113,9 @@ pool.on("error", (err) => {
 pool.on("connection", (connection) => {
   connection.on("error", (err) => {
     if (err.code === "PROTOCOL_CONNECTION_LOST") {
-      console.error("[DB] Connection lost.");
-    } else if (err.code === "PROTOCOL_ERROR") {
-      console.error("[DB] Protocol error:", err);
-    } else if (err.code === "ER_CON_COUNT_ERROR") {
-      console.error("[DB] Too many connections.");
-    } else if (err.code === "ER_AUTHENTICATION_PLUGIN_ERROR") {
-      console.error("[DB] Authentication plugin error.");
-    } else if (err.code === "ER_HANDSHAKE_INPROGRESS") {
-      console.error("[DB] Handshake in progress.");
+      console.error("[DB] Connection lost - will retry.");
+    } else {
+      console.error("[DB] Connection error:", err.message);
     }
   });
 });
