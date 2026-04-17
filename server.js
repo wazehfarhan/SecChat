@@ -28,6 +28,8 @@ const sanitizeBody = require("./middleware/sanitize");
 const { startCleanup, stopCleanup } = require("./services/cleanupService");
 const Room = require("./models/Room");
 const Message = require("./models/Message");
+const TypingIndicator = require("./models/TypingIndicator");
+const ReadReceipt = require("./models/ReadReceipt");
 
 // ────────────────────────────────────────────────────────────
 // App & Server setup
@@ -234,10 +236,75 @@ io.on("connection", (socket) => {
         iv: cleanIv,
         ts: new Date().toISOString(),
       });
+
+      // Stop typing indicator when message sent
+      if (process.env.FEATURE_TYPING_INDICATORS === "true") {
+        await TypingIndicator.stopTyping(socket.roomId, socket.nickname);
+        io.to(socket.currentRoom).emit("chat:typing", { typists: [] });
+      }
     } catch (err) {
       console.error("[Socket] chat:message error:", err.message);
     }
   });
+
+  /**
+   * EVENT: chat:typing
+   * Client sends a typing indicator (sent periodically while user is typing).
+   * Payload: { isTyping: boolean }
+   */
+  if (process.env.FEATURE_TYPING_INDICATORS === "true") {
+    socket.on("chat:typing", async ({ isTyping } = {}) => {
+      try {
+        if (!socket.currentRoom || !socket.nickname || !socket.roomId) return;
+
+        if (isTyping) {
+          // Mark user as typing
+          await TypingIndicator.markTyping(socket.roomId, socket.nickname);
+        } else {
+          // Clear typing status
+          await TypingIndicator.stopTyping(socket.roomId, socket.nickname);
+        }
+
+        // Get current typists and broadcast
+        const typists = await TypingIndicator.getTypersInRoom(socket.roomId);
+        const typistNames = typists
+          .map((t) => t.nickname)
+          .filter((n) => n !== socket.nickname); // Don't show self as typing
+
+        io.to(socket.currentRoom).emit("chat:typing", { typists: typistNames });
+      } catch (err) {
+        console.error("[Socket] chat:typing error:", err.message);
+      }
+    });
+  }
+
+  /**
+   * EVENT: chat:read
+   * Client notifies that they've read a message.
+   * Payload: { messageId: number }
+   */
+  if (process.env.FEATURE_READ_RECEIPTS === "true") {
+    socket.on("chat:read", async ({ messageId } = {}) => {
+      try {
+        if (!socket.currentRoom || !socket.nickname || !messageId) return;
+
+        // Record the read receipt
+        await ReadReceipt.markRead(messageId, socket.nickname);
+
+        // Get all readers for this message
+        const readers = await ReadReceipt.getReadersForMessage(messageId);
+        const readerNames = readers.map((r) => r.nickname);
+
+        // Broadcast read status to room
+        io.to(socket.currentRoom).emit("chat:readReceipts", {
+          messageId,
+          readers: readerNames,
+        });
+      } catch (err) {
+        console.error("[Socket] chat:read error:", err.message);
+      }
+    });
+  }
 
   /**
    * EVENT: disconnect
