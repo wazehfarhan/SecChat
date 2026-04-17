@@ -15,7 +15,7 @@
     "test": "echo 'Add your test suite here' && exit 0"
   },
   "dependencies": {
-    "bcrypt": "^5.1.1",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -40,10 +40,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/vanishchat.git"
+    "url": "https://github.com/wazehfarhan/SecChat.git"
   },
-  "author": "Your Name",
+  "author": "w2zullah",
   "bugs": {
-    "url": "https://github.com/yourusername/vanishchat/issues"
+    "url": "https://github.com/wazehfarhan/SecChat/issues"
   }
 }

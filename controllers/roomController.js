@@ -6,7 +6,7 @@
 
 const Room = require("../models/Room");
 const crypto = require("crypto");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 
 /**
  * Generate a unique 6-character uppercase alphanumeric room code.
