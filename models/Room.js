@@ -9,6 +9,7 @@ const db = require("../config/db");
 
 const Room = {
   /**
+<<<<<<< HEAD
    * Create a new room with optional password protection.
    * @param {object} options - Room options
    * @param {string} options.roomCode - 6-char uppercase alphanumeric
@@ -59,12 +60,43 @@ const Room = {
 
   /**
    * Find a room by its 6-char code (including password hash if set).
+=======
+   * Create a new room.
+   * @param {string} roomCode  - 6-char uppercase alphanumeric
+   * @param {string} type      - 'single' | 'group'
+   * @param {string} expiryInterval - MySQL interval like '10 MINUTE', '1 HOUR', '24 HOUR'
+   * @returns {object} Inserted row data
+   */
+  async create(roomCode, type, expiryInterval) {
+    // Use MySQL to calculate expiry time to avoid timezone issues
+    const [result] = await db.execute(
+      `INSERT INTO rooms (room_code, type, expires_at)
+             VALUES (?, ?, DATE_ADD(NOW(), INTERVAL ?))`,
+      [roomCode, type, expiryInterval],
+    );
+
+    // Fetch the created room to get the actual expires_at
+    const [rows] = await db.execute(
+      `SELECT id, room_code, type, created_at, expires_at, is_active
+             FROM rooms WHERE id = ?`,
+      [result.insertId],
+    );
+    return rows[0];
+  },
+
+  /**
+   * Find a room by its 6-char code.
+>>>>>>> ebbbac0 (Implement real-time typing indicator feature and fix timezone issues in room expiry)
    * Returns null if not found or already marked inactive.
    */
   async findByCode(roomCode) {
     const [rows] = await db.execute(
+<<<<<<< HEAD
       `SELECT id, room_code, type, created_at, expires_at, is_active,
                     expiry_preset, password_hash, has_password, max_participants
+=======
+      `SELECT id, room_code, type, created_at, expires_at, is_active
+>>>>>>> ebbbac0 (Implement real-time typing indicator feature and fix timezone issues in room expiry)
              FROM rooms
              WHERE room_code = ? AND is_active = 1
              LIMIT 1`,
@@ -86,6 +118,7 @@ const Room = {
   },
 
   /**
+<<<<<<< HEAD
    * Get room count for statistics.
    */
   async getStats() {
@@ -108,10 +141,24 @@ const Room = {
   },
 
   /**
+=======
+   * Hard-delete a room by its primary key.
+   * The CASCADE FK on messages will delete all associated messages automatically.
+   */
+  async deleteById(roomId) {
+    await db.execute(`DELETE FROM rooms WHERE id = ?`, [roomId]);
+  },
+
+  /**
+>>>>>>> ebbbac0 (Implement real-time typing indicator feature and fix timezone issues in room expiry)
    * Batch hard-delete multiple rooms (used by cleanup job).
    */
   async deleteManyByIds(ids) {
     if (!ids || ids.length === 0) return;
+<<<<<<< HEAD
+=======
+    // Build IN (?, ?, ?) placeholders dynamically
+>>>>>>> ebbbac0 (Implement real-time typing indicator feature and fix timezone issues in room expiry)
     const placeholders = ids.map(() => "?").join(",");
     await db.execute(`DELETE FROM rooms WHERE id IN (${placeholders})`, ids);
   },

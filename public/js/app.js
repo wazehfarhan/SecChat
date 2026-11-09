@@ -14,6 +14,8 @@
 let socket = null; // Socket.IO instance
 let cryptoKey = null; // CryptoKey object for E2E encryption
 let myNickname = null; // This session's nickname
+let typingTimeout = null; // Timeout for stopping typing indicator
+let isTyping = false; // Track if user is currently typing
 
 // ────────────────────────────────────────────────────────────
 // DOM References (populated after DOMContentLoaded)
@@ -26,7 +28,7 @@ let createTypeSelect,
   customExpiryInput;
 let joinCodeInput;
 let nicknameModal, nicknameInput, nicknameConfirmBtn;
-let messagesContainer, messageInput, sendBtn;
+let messagesContainer, messageInput, sendBtn, typingIndicator;
 let roomCodeDisplay, roomTimerDisplay, roomTypeDisplay;
 let copyCodeBtn;
 
@@ -84,6 +86,69 @@ function appendMessage({
 
   messagesContainer.appendChild(wrapper);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// ────────────────────────────────────────────────────────────
+// Typing Indicator
+// ────────────────────────────────────────────────────────────
+const typingUsers = new Map(); // Track who is typing: nickname -> timeout
+
+function updateTypingIndicator() {
+  const typingTextEl = typingIndicator.querySelector(".typing-text");
+  const typingNicks = Array.from(typingUsers.keys()).filter(
+    (n) => n !== myNickname,
+  );
+
+  if (typingNicks.length === 0) {
+    typingIndicator.classList.add("hidden");
+  } else if (typingNicks.length === 1) {
+    typingIndicator.classList.remove("hidden");
+    typingTextEl.textContent = `${typingNicks[0]} is typing...`;
+  } else {
+    typingIndicator.classList.remove("hidden");
+    typingTextEl.textContent = `${typingNicks.length} users are typing...`;
+  }
+}
+
+function handleRemoteTyping({ nickname, isTyping: remoteIsTyping }) {
+  // Clear existing timeout for this user
+  if (typingUsers.has(nickname)) {
+    clearTimeout(typingUsers.get(nickname));
+  }
+
+  if (remoteIsTyping) {
+    // Set timeout to clear typing status after 3 seconds of inactivity
+    const timeout = setTimeout(() => {
+      typingUsers.delete(nickname);
+      updateTypingIndicator();
+    }, 3000);
+    typingUsers.set(nickname, timeout);
+  } else {
+    typingUsers.delete(nickname);
+  }
+
+  updateTypingIndicator();
+}
+
+function emitTyping(isTyping) {
+  if (!socket || !socket.connected || !socket.currentRoom) return;
+  socket.emit("chat:typing", { isTyping });
+}
+
+function handleInputChange() {
+  if (!isTyping) {
+    isTyping = true;
+    emitTyping(true);
+  }
+
+  // Clear existing timeout
+  if (typingTimeout) clearTimeout(typingTimeout);
+
+  // Set timeout to stop typing after 1 second of inactivity
+  typingTimeout = setTimeout(() => {
+    isTyping = false;
+    emitTyping(false);
+  }, 1000);
 }
 
 // ────────────────────────────────────────────────────────────
@@ -195,6 +260,10 @@ function connectSocket() {
 
   // ── Room joined confirmation ───────────────────────────
   socket.on("chat:joined", ({ roomCode, type, expiresAt, nickname }) => {
+    // Clear typing indicators when joining a new room
+    typingUsers.clear();
+    updateTypingIndicator();
+
     roomCodeDisplay.textContent = roomCode;
     roomTypeDisplay.textContent =
       type === "single" ? "🔒 Private (1-on-1)" : "👥 Group";
@@ -245,9 +314,16 @@ function connectSocket() {
     appendMessage({ isSystem: true, text, ts });
   });
 
+  // ── Typing indicator ───────────────────────────────────
+  socket.on("chat:typing", ({ nickname, isTyping }) => {
+    handleRemoteTyping({ nickname, isTyping });
+  });
+
   // ── Room expired ───────────────────────────────────────
   socket.on("room:expired", () => {
     stopTimer();
+    typingUsers.clear();
+    updateTypingIndicator();
     socket.disconnect();
     showView("expired");
   });
@@ -379,6 +455,16 @@ async function sendMessage() {
     socket.emit("chat:message", { content: ciphertext, iv });
     messageInput.value = "";
     messageInput.focus();
+
+    // Clear typing status after sending
+    if (isTyping) {
+      isTyping = false;
+      emitTyping(false);
+    }
+    if (typingTimeout) {
+      clearTimeout(typingTimeout);
+      typingTimeout = null;
+    }
   } catch (err) {
     console.error("Encrypt/send error:", err);
     alert("Failed to send message. Encryption error.");
@@ -407,6 +493,7 @@ document.addEventListener("DOMContentLoaded", () => {
   messagesContainer = document.getElementById("messages");
   messageInput = document.getElementById("message-input");
   sendBtn = document.getElementById("send-btn");
+  typingIndicator = document.getElementById("typing-indicator");
   roomCodeDisplay = document.getElementById("room-code-display");
   roomTimerDisplay = document.getElementById("room-timer");
   roomTypeDisplay = document.getElementById("room-type-display");
@@ -437,6 +524,9 @@ document.addEventListener("DOMContentLoaded", () => {
       sendMessage();
     }
   });
+
+  // Typing indicator - detect when user is typing
+  messageInput.addEventListener("input", handleInputChange);
 
   // Copy room code to clipboard
   copyCodeBtn.addEventListener("click", () => {

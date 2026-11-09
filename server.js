@@ -142,7 +142,11 @@ io.on("connection", (socket) => {
         socket.emit("error:room", { message: "Room not found or expired." });
         return;
       }
-      if (new Date() >= new Date(room.expires_at + "Z")) {
+
+      // Check expiry - MySQL DATETIME stores local time
+      const now = new Date();
+      const expiresAt = new Date(room.expires_at);
+      if (now >= expiresAt) {
         await Room.deleteById(room.id);
         socket.emit("room:expired", { message: "Room has expired." });
         return;
@@ -191,6 +195,28 @@ io.on("connection", (socket) => {
     } catch (err) {
       console.error("[Socket] chat:join error:", err.message);
       socket.emit("error:room", { message: "Failed to join room." });
+    }
+  });
+
+  /**
+   * EVENT: chat:typing
+   * Client sends typing status when they start/stop typing.
+   * Payload: { isTyping: boolean }
+   */
+  socket.on("chat:typing", async ({ isTyping } = {}) => {
+    try {
+      if (!socket.currentRoom || !socket.nickname) return;
+
+      // Validate
+      if (typeof isTyping !== "boolean") return;
+
+      // Broadcast to other users in the room (not back to sender)
+      socket.to(socket.currentRoom).emit("chat:typing", {
+        nickname: socket.nickname,
+        isTyping: isTyping,
+      });
+    } catch (err) {
+      console.error("[Socket] chat:typing error:", err.message);
     }
   });
 

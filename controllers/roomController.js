@@ -86,6 +86,7 @@ async function createRoom(req, res) {
         .json({ error: "Invalid room type. Must be 'single' or 'group'." });
     }
 
+<<<<<<< HEAD
     // --- Compute expires_at ---
     const now = new Date();
     let expiresAt;
@@ -116,6 +117,63 @@ async function createRoom(req, res) {
         return res.status(400).json({ error: "Invalid expiryPreset." });
       }
       expiresAt = new Date(now.getTime() + ms);
+=======
+    // --- Compute expires_at (store as local time) ---
+    const now = new Date();
+    let expiresAt;
+
+    // Helper function to format Date as local datetime for MySQL
+    function toLocalDatetime(date) {
+      const y = date.getFullYear();
+      const m = String(date.getMonth() + 1).padStart(2, "0");
+      const d = String(date.getDate()).padStart(2, "0");
+      const h = String(date.getHours()).padStart(2, "0");
+      const min = String(date.getMinutes()).padStart(2, "0");
+      const s = String(date.getSeconds()).padStart(2, "0");
+      return `${y}-${m}-${d} ${h}:${min}:${s}`;
+    }
+
+    switch (expiryType) {
+      case "10m":
+        expiresAt = toLocalDatetime(new Date(now.getTime() + 10 * 60 * 1000));
+        break;
+      case "1h":
+        expiresAt = toLocalDatetime(new Date(now.getTime() + 60 * 60 * 1000));
+        break;
+      case "24h":
+        expiresAt = toLocalDatetime(
+          new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        );
+        break;
+      case "custom":
+        if (!customExpiry) {
+          return res.status(400).json({
+            error: "customExpiry datetime required when expiryType is custom.",
+          });
+        }
+        expiresAt = toLocalDatetime(new Date(customExpiry));
+        if (isNaN(new Date(customExpiry).getTime())) {
+          return res
+            .status(400)
+            .json({ error: "Invalid customExpiry datetime format." });
+        }
+        // Must be in the future
+        if (new Date(customExpiry) <= now) {
+          return res
+            .status(400)
+            .json({ error: "customExpiry must be in the future." });
+        }
+        // Cap at 30 days to prevent abuse
+        const maxExpiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        if (new Date(customExpiry) > maxExpiry) {
+          return res.status(400).json({
+            error: "customExpiry cannot be more than 30 days in the future.",
+          });
+        }
+        break;
+      default:
+        return res.status(400).json({ error: "Invalid expiryType." });
+>>>>>>> ebbbac0 (Implement real-time typing indicator feature and fix timezone issues in room expiry)
     }
 
     // --- Hash password if provided ---
@@ -203,8 +261,18 @@ async function joinRoom(req, res) {
       });
     }
 
+<<<<<<< HEAD
     // --- Check expiry ---
     if (new Date() >= new Date(room.expires_at + "Z")) {
+=======
+    // Check expiry (double-check in app layer, not just DB)
+    // MySQL DATETIME stores local time, so don't add "Z"
+    const now = new Date();
+    const expiresAt = new Date(room.expires_at);
+
+    if (now >= expiresAt) {
+      // Trigger deletion immediately
+>>>>>>> ebbbac0 (Implement real-time typing indicator feature and fix timezone issues in room expiry)
       await Room.deleteById(room.id);
       return res.status(410).json({
         error:
